@@ -85,17 +85,15 @@ jobs:
             test "$pom_line" -lt "$metadata_line"
           done
 
-      - name: Check refuses the versions now that they are released
-        id: refused
-        continue-on-error: true
-        uses: ./check
-        with:
-          bucket: stub-bucket
-          endpoint: https://stub.r2.cloudflarestorage.com
-          access-key-id: stub-access-key-id
-          secret-access-key: stub-secret-access-key
-          artifacts: |
-            com.example:example-sdk:1.2.3
-
-      - name: The refusal failed the step
-        run: test "${{ steps.refused.outcome }}" = "failure"
+      - name: The check now refuses the released version, and uploads nothing
+        env:
+          AWS_ACCESS_KEY_ID: stub-access-key-id
+          AWS_SECRET_ACCESS_KEY: stub-secret-access-key
+        run: |
+          uploads_before=$(grep -c '^put-object' stub/calls)
+          if scripts/maven-repository.sh check stub-bucket https://stub.r2.cloudflarestorage.com com.example:example-sdk:1.2.3 2> refusal; then
+            echo "::error::the check accepted a released version"
+            exit 1
+          fi
+          grep -q "com.example:example-sdk:1.2.3 is already in the bucket" refusal
+          test "$(grep -c '^put-object' stub/calls)" -eq "$uploads_before"
