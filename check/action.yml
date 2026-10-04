@@ -1,0 +1,32 @@
+name: Check the ConfigDirector Maven repository
+description: Fails when any of the given artifact versions already has a POM in the repository bucket, so a release never replaces a published version.
+
+inputs:
+  bucket:
+    description: Name of the R2 bucket behind the repository.
+    required: true
+  endpoint:
+    description: S3 endpoint of the bucket, https://<account id>.r2.cloudflarestorage.com.
+    required: true
+  access-key-id:
+    description: Access key ID of an R2 API token with Object Read & Write on the bucket.
+    required: true
+  secret-access-key:
+    description: Secret access key of that token.
+    required: true
+  artifacts:
+    description: The versions about to be released, one group:artifactId:version per line.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Refuse a version that is already in the Maven repository
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.secret-access-key }}
+        BUCKET: ${{ inputs.bucket }}
+        ENDPOINT: ${{ inputs.endpoint }}
+        ARTIFACTS: ${{ inputs.artifacts }}
+      run: '"$GITHUB_ACTION_PATH/../scripts/maven-repository.sh" check "$BUCKET" "$ENDPOINT" "$ARTIFACTS"'

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Script tests and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Test the script
+        run: test/maven-repository.test.sh
+
+      - name: Lint the actions and workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  actions:
+    name: Run both actions against a stubbed bucket
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STUB_CALLS_FILE: ${{ github.workspace }}/stub/calls
+      STUB_BUCKET_DIRECTORY: ${{ github.workspace }}/stub/bucket
+      STUB_HEADERS_DIRECTORY: ${{ github.workspace }}/stub/headers
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Put the stubbed aws on the PATH and stage two versions
+        run: |
+          mkdir -p stub/bin stub/bucket stub/headers
+          cp test/aws-stub.sh stub/bin/aws
+          echo "$PWD/stub/bin" >> "$GITHUB_PATH"
+          for artifact in example-sdk example-sdk-testing; do
+            directory="build/maven-repository/com/example/$artifact/1.2.3"
+            mkdir -p "$directory"
+            for file in "$artifact-1.2.3.jar" "$artifact-1.2.3.pom" "$artifact-1.2.3.module"; do
+              printf 'staged %s\n' "$file" > "$directory/$file"
+              printf 'signature of %s\n' "$file" > "$directory/$file.asc"
+            done
+          done
+
+      - name: Check passes for versions that are not in the bucket
+        uses: ./check
+        with:
+          bucket: stub-bucket
+          endpoint: https://stub.r2.cloudflarestorage.com
+          access-key-id: stub-access-key-id
+          secret-access-key: stub-secret-access-key
+          artifacts: |
+            com.example:example-sdk:1.2.3
+            com.example:example-sdk-testing:1.2.3
+
+      - name: Upload both versions
+        uses: ./upload
+        with:
+          bucket: stub-bucket
+          endpoint: https://stub.r2.cloudflarestorage.com
+          access-key-id: stub-access-key-id
+          secret-access-key: stub-secret-access-key
+          attest: "false"
+          artifacts: |
+            com.example:example-sdk:1.2.3
+            com.example:example-sdk-testing:1.2.3
+
+      - name: The bucket holds both versions, their metadata, and the POMs went up after the other files
+        run: |
+          for artifact in example-sdk example-sdk-testing; do
+            test -f "stub/bucket/com/example/$artifact/1.2.3/$artifact-1.2.3.pom"
+            grep -q "<version>1.2.3</version>" "stub/bucket/com/example/$artifact/maven-metadata.xml"
+            grep -q "cache-control=no-cache" "stub/headers/com/example/$artifact/maven-metadata.xml"
+            jar_line=$(grep -n "put-object com/example/$artifact/1.2.3/$artifact-1.2.3.jar " stub/calls | cut -d: -f1)
+            pom_line=$(grep -n "put-object com/example/$artifact/1.2.3/$artifact-1.2.3.pom " stub/calls | cut -d: -f1)
+            metadata_line=$(grep -n "put-object com/example/$artifact/maven-metadata.xml " stub/calls | cut -d: -f1)
+            test "$jar_line" -lt "$pom_line"
+            test "$pom_line" -lt "$metadata_line"
+          done
+
+      - name: Check refuses the versions now that they are released
+        id: refused
+        continue-on-error: true
+        uses: ./check
+        with:
+          bucket: stub-bucket
+          endpoint: https://stub.r2.cloudflarestorage.com
+          access-key-id: stub-access-key-id
+          secret-access-key: stub-secret-access-key
+          artifacts: |
+            com.example:example-sdk:1.2.3
+
+      - name: The refusal failed the step
+        run: test "${{ steps.refused.outcome }}" = "failure"
