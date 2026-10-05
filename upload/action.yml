@@ -1,5 +1,5 @@
 name: Upload to the ConfigDirector Maven repository
-description: Uploads released versions from a staging Maven repository to the repository bucket, attesting every jar and POM first. For each version it uploads the version's files, then its POM, then rewrites the artifact's maven-metadata.xml. A version whose POM is already in the bucket is refused before anything is uploaded.
+description: Uploads released versions from a staging Maven repository to the repository bucket, attesting every AAR, jar and POM first. For each version it uploads the version's files, then its POM, then rewrites the artifact's maven-metadata.xml. A version whose POM is already in the bucket is refused before anything is uploaded.
 
 inputs:
   staging-directory:
@@ -22,7 +22,7 @@ inputs:
     description: The versions to upload, one group:artifactId:version per line.
     required: true
   attest:
-    description: Whether to create GitHub build attestations for the jars and POMs. The job then needs the id-token and attestations write permissions.
+    description: Whether to create GitHub build attestations for the AARs, jars and POMs. The job then needs the id-token and attestations write permissions.
     required: false
     default: "true"
 
@@ -39,11 +39,12 @@ runs:
         ARTIFACTS: ${{ inputs.artifacts }}
       run: '"$GITHUB_ACTION_PATH/../scripts/maven-repository.sh" check "$BUCKET" "$ENDPOINT" "$ARTIFACTS"'
 
-    - name: Attest the jars and POMs
+    - name: Attest the AARs, jars and POMs
       if: inputs.attest == 'true'
       uses: actions/attest-build-provenance@v4
       with:
         subject-path: |
+          ${{ inputs.staging-directory }}/**/*.aar
           ${{ inputs.staging-directory }}/**/*.jar
           ${{ inputs.staging-directory }}/**/*.pom
 

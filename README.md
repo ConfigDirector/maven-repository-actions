@@ -11,7 +11,7 @@ Two actions share one script:
 | Action | What it does |
 | --- | --- |
 | `check` | Fails when any of the given versions already has a POM in the bucket. Run it before building, so a release that would be refused costs nothing. |
-| `upload` | Runs the same check, attests every jar and POM, then uploads the versions from a staging Maven repository the build published into. |
+| `upload` | Runs the same check, attests every AAR, jar and POM, then uploads the versions from a staging Maven repository the build published into. |
 
 ## Usage
 
@@ -66,7 +66,7 @@ jobs:
 | `secret-access-key` | required | required | Secret access key of that token. |
 | `artifacts` | required | required | The versions, one `group:artifactId:version` per line. |
 | `staging-directory` | | `build/maven-repository` | Where the build published the release. |
-| `attest` | | `true` | Create GitHub build attestations for the jars and POMs. Needs the `id-token` and `attestations` write permissions on the job. |
+| `attest` | | `true` | Create GitHub build attestations for the AARs, jars and POMs. Needs the `id-token` and `attestations` write permissions on the job. |
 
 The runner needs the AWS CLI, which GitHub's Ubuntu runners include.
 
@@ -86,8 +86,8 @@ The runner needs the AWS CLI, which GitHub's Ubuntu runners include.
   `Cache-Control: no-cache`, which the repository's cache rules turn into a revalidation on every
   use and a five minute lifetime for clients. Version files carry no header and are cached for a
   year.
-- **Every jar and POM has provenance.** `gh attestation verify <file> --owner ConfigDirector` passes
-  for each one after the release.
+- **Every AAR, jar and POM has provenance.** `gh attestation verify <file> --owner ConfigDirector`
+  passes for each one after the release.
 
 ## Development
 
